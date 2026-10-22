@@ -1,0 +1,36 @@
+# nascine 部署文件
+#
+# 容器内的服务名 / 容器名 / 主机名统一为 nascine，端口与目录约定保持不变，
+# 从旧版部署迁移时只需替换 image 与环境变量（见文末说明）。
+
+services:
+  nascine:
+    image: xdxy/nascine:1.0.5         # 本地导入的 tar 也能用；推上 Docker Hub 后可直接 pull
+    container_name: nascine
+    hostname: nascine
+    restart: unless-stopped
+    network_mode: bridge
+    ports:
+      - 3000:3000                      # 默认的 webui 控制端口
+    volumes:
+      - ./config:/config               # 冒号左边改成你想保存配置的路径
+      - /mnt/user/downloads:/downloads # 下载目录（Unraid 为 /mnt/user/...，群晖为 /volume1/...）
+      - /mnt/user/media:/media         # 媒体库目录，多个目录分别映射
+    environment:
+      # 必须与下载器（qBittorrent/Transmission）、媒体服务器（Emby/Jellyfin/Plex）完全一致
+      - PUID=99                        # Unraid 常用 99（nobody），群晖常用 1026
+      - PGID=100                       # Unraid 常用 100（users），群晖常用 100
+      - UMASK=002                      # 002 让同组可写；沿用官方的 000 也行
+      - TZ=Asia/Shanghai
+      # 版本检查指向本镜像的 Docker Hub 仓库，程序据此提示「有新版本可拉取」
+      - NASCINE_IMAGE_REPO=xdxy/nascine
+      - NASCINE_UPDATE_MODE=docker
+
+# 说明
+#
+# 1. 升级方式：docker compose pull && docker compose up -d
+#    镜像内不执行 git 更新，所以没有 NASCINE_AUTO_UPDATE 之类的开关需要设置。
+# 2. NASCINE_IMAGE_REPO / NASCINE_UPDATE_MODE 只影响右上角的版本提示，不填也能正常运行。
+# 3. 从旧版部署迁移：把 volumes 里的配置目录原样挂过来即可，
+#    配置结构、数据库、媒体目录映射都不变；只需改 image 与服务名。
+# 4. volumes 占位符必须换成真实路径，中文占位符不改会被 docker 建成字面目录。

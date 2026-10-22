@@ -1,0 +1,30 @@
+# ---- 打包/构建产物（体积很大，不要进仓库）----
+stage5/
+.release-work-*/
+*.tar
+*.tar.gz
+*.tar.new
+# 差分打包的基础镜像 tar 放在上一级目录，这里再兜一层
+../nascine-*.tar
+
+# ---- 构建时留下的临时目录 / 临时文件 ----
+/9s3244jp
+/dj3scyel
+/i9nlvc8y
+/s7nq4wet
+brand/56cyfqpd
+brand/fyepcbnx
+brand/lef6gpib
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# ---- 编辑器/系统 ----
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

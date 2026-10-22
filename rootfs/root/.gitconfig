@@ -1,0 +1,4 @@
+[pull]
+	ff = only
+[safe]
+	directory = /nas-tools

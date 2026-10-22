@@ -1,0 +1,7 @@
+# Docker Hub「Short description」字段（限 100 字符，二选一，不要两行都贴）
+
+中文（40 字符）：
+极简苹果风个人影音库中枢：下载完成自动分类、重命名、刮削入库，零内置第三方服务。
+
+English (97 chars):
+Minimal Apple-style media hub: auto organize, rename and scrape downloads. Zero built-in proxies.
