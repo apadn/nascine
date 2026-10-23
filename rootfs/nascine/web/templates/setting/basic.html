@@ -69,16 +69,6 @@
                   </select>
                 </div>
               </div>
-              <div class="col-lg">
-                <div class="mb-3">
-                  <label class="form-label">监控轮询间隔（秒） <span class="form-help"
-                                                               title="仅当监控目录位于 /mnt/user 这类 FUSE 挂载（Unraid）或 Windows 时生效：程序默认每 10 秒扫描一次目录树，会让机械盘无法休眠。填 0 表示关闭轮询、改用 inotify 事件监控（不再有周期性磁盘访问）；修改后监控会自动重启"
-                                                               data-bs-toggle="tooltip">?</span></label>
-                  <input type="number" min="0" step="1" class="form-control" id="app.sync_poll_interval"
-                         value="{{ Config.app.get('sync_poll_interval', 10) }}"
-                         placeholder="10" autocomplete="off">
-                </div>
-              </div>
             </div>
             <div class="row">
               <div class="col-lg">

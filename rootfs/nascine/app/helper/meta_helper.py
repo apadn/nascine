@@ -29,8 +29,6 @@ class MetaHelper(object):
 
     _meta_path = None
     _tmdb_cache_expire = False
-    # 上次落盘时的键集合，用于判断是否需要写盘（避免每 10 分钟回读磁盘）
-    _saved_keys = set()
 
     def __init__(self):
         self.init_config()
@@ -41,7 +39,6 @@ class MetaHelper(object):
             self._tmdb_cache_expire = laboratory.get("tmdb_cache_expire")
         self._meta_path = os.path.join(Config().get_config_path(), 'tmdb.dat')
         self._meta_data = self.__load_meta_data(self._meta_path)
-        self._saved_keys = set(self._meta_data.keys())
 
     def clear_meta_data(self):
         """
@@ -166,20 +163,17 @@ class MetaHelper(object):
     def save_meta_data(self, force=False):
         """
         保存缓存数据到文件
-        说明：不再每次从磁盘把旧文件读回来做比对。本进程是 tmdb.dat 的唯一写入者，
-        每 10 分钟读一次会让 /config 所在的机械盘无法进入休眠；这里改为记录上次落盘
-        时的键集合，只在内容真的变化时才写盘，空闲时零磁盘 IO。
         """
+        meta_data = self.__load_meta_data(self._meta_path)
         new_meta_data = {k: v for k, v in self._meta_data.items() if str(v.get("id")) != '0'}
 
         if not force \
                 and not self._random_sample(new_meta_data) \
-                and self._saved_keys == set(new_meta_data.keys()):
+                and meta_data.keys() == new_meta_data.keys():
             return
 
         with open(self._meta_path, 'wb') as f:
             pickle.dump(new_meta_data, f, pickle.HIGHEST_PROTOCOL)
-        self._saved_keys = set(new_meta_data.keys())
 
     def _random_sample(self, new_meta_data):
         """
