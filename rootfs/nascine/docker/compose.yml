@@ -5,7 +5,7 @@
 
 services:
   nascine:
-    image: xdxy/nascine:1.0.5         # 本地导入的 tar 也能用；推上 Docker Hub 后可直接 pull
+    image: xdxy/nascine:1.0.6         # 本地导入的 tar 也能用；推上 Docker Hub 后可直接 pull
     container_name: nascine
     hostname: nascine
     restart: unless-stopped

@@ -53,7 +53,7 @@ docker run -d \
     -e TZ=Asia/Shanghai \
     -e NASCINE_IMAGE_REPO=xdxy/nascine \
     -e NASCINE_UPDATE_MODE=docker \
-    xdxy/nascine:1.0.5
+    xdxy/nascine:1.0.6
 ```
 
 - `-v` 左边改成你在宿主机上的真实路径，冒号右边是容器内路径，要与「系统设置 → 目录同步」里填的路径一致。
@@ -65,7 +65,7 @@ docker run -d \
 直接用同目录下的 `compose.yml`：
 
 ```bash
-docker compose pull     # 或者 docker load -i nascine-1.0.5.tar
+docker compose pull     # 或者 docker load -i nascine-1.0.6.tar
 docker compose up -d
 ```
 
@@ -78,12 +78,12 @@ docker compose pull && docker compose up -d
 或手工：
 
 ```bash
-docker pull xdxy/nascine:1.0.5
+docker pull xdxy/nascine:1.0.6
 docker stop nascine && docker rm nascine   # 配置在 /config 卷里，不会丢
 docker run ...                              # 用上面同样的参数重建
 ```
 
-版本号可以在侧栏底部看到（当前 `v1.0.5`）。程序内的「更新」按钮只会提示新版本 tag 与 `docker pull` 命令，
+版本号可以在侧栏底部看到（当前 `v1.0.6`）。程序内的「更新」按钮只会提示新版本 tag 与 `docker pull` 命令，
 不会自己下载或改动文件。
 
 ## 关于 PUID/PGID 的说明
@@ -103,7 +103,7 @@ docker run ...                              # 用上面同样的参数重建
 
 | 项目 | 原版 | nascine |
 | --- | --- | --- |
-| `image` | 旧镜像 | `xdxy/nascine:1.0.5` |
+| `image` | 旧镜像 | `xdxy/nascine:1.0.6` |
 | 容器名 / 主机名 | `nas-tools`（旧） | `nascine` |
 | 版本检查变量 | 无 | `NASCINE_IMAGE_REPO=xdxy/nascine`、`NASCINE_UPDATE_MODE=docker` |
 | `NASTOOL_*` 环境变量 | 有 | 统一改为 `NASCINE_*`（`AUTO_UPDATE` / `CN_UPDATE` / `REPO_URL` 已不需要） |

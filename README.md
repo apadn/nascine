@@ -1,7 +1,7 @@
 # nascine
 
-[![Docker Pulls](https://img.shields.io/docker/pulls/xdxy/nascine?logo=docker&logoColor=white)](https://hub.docker.com/r/xdxy/nascine)
-[![Docker Image Version](https://img.shields.io/docker/v/xdxy/nascine/latest?label=image&logo=docker&logoColor=white)](https://hub.docker.com/r/xdxy/nascine/tags)
+[![Docker Pulls](https://img.shields.io/docker/pulls/xdxy/nascine)](https://hub.docker.com/r/xdxy/nascine)
+[![Image Version](https://img.shields.io/docker/v/xdxy/nascine/latest?label=image)](https://hub.docker.com/r/xdxy/nascine/tags)
 [![License: AGPL v3](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
 ![Platform](https://img.shields.io/badge/platform-linux%2Famd64-lightgrey)
 
@@ -89,6 +89,8 @@ docker run -d \
 │   ├── docker/              compose.yml 部署样例
 │   └── run.py               入口
 ├── rootfs/etc  rootfs/root  rootfs/usr    容器系统层（启动脚本、cron）
+├── slim/prune.sh            镜像裁剪清单
+├── make_slim.py             裁剪 + 扁平化，重导入为单层镜像
 ├── brand/                   品牌素材
 ├── make_release.py          图层差分打包脚本
 ├── release.json             版本号 / 命名空间 / 仓库名
@@ -101,22 +103,35 @@ docker run -d \
 
 ```bash
 # 1. 准备基础镜像（首次从 Docker Hub 拉取，之后用上一版自己的 tar 做基础）
-docker pull xdxy/nascine:1.0.5
+docker pull xdxy/nascine:1.0.6
 
 # 2. 修改代码
 vim rootfs/nascine/app/sync.py
 
 # 3. 改版本号后打包
-vim release.json          # version: 1.0.5 -> 1.0.6，baseTar 指向上一版 tar
-python3 make_release.py   # 输出 ../nascine-1.0.6.tar
+vim release.json          # version: 1.0.6 -> 1.0.7，baseTar 指向上一版 tar
+python3 make_release.py   # 输出 ../nascine-1.0.7.tar
 
 # 4. 导入并推送
-docker load -i ../nascine-1.0.6.tar
-docker push xdxy/nascine:1.0.6
-docker tag xdxy/nascine:1.0.6 xdxy/nascine:latest && docker push xdxy/nascine:latest
+docker load -i ../nascine-1.0.7.tar
+docker push xdxy/nascine:1.0.7
+docker tag xdxy/nascine:1.0.7 xdxy/nascine:latest && docker push xdxy/nascine:latest
 ```
 
 `make_release.py` 支持 `--version`、`--namespace`、`--repository`、`--base`、`--dry-run` 覆盖 `release.json` 的配置。
+
+## 镜像瘦身
+
+1.0.6 起镜像从 2.35 GB 精简到 **681 MB**（`docker pull` 实际下载约 145 MB），做法是裁剪 + 扁平化两步：
+
+```bash
+python3 make_slim.py --source xdxy/nascine:1.0.5 --target xdxy/nascine:1.0.6 --version 1.0.6
+```
+
+- **裁剪**：`slim/prune.sh` 在容器内删掉运行期没有任何调用路径的组件——chromium / chromedriver（站点签到与索引器已随 PT 模块移除）、gcc 工具链与 C 头文件、`libpython*.a`、Cython / jedi / pygments / prompt_toolkit、rclone、ffmpeg / ffprobe、git / mc、字体、`plexapi` 的测试数据。每一项删除前都核对过调用点。
+- **扁平化**：`rm` 在增量层里只留一个 whiteout 标记，原层字节仍在、照样要下载。所以流程是 裁剪层 → `docker export` 拿扁平根文件系统 → `docker import --change` 逐条还原 ENV / ENTRYPOINT / WORKDIR / VOLUME / EXPOSE / LABEL → `docker save`。删掉的字节这才真正消失。
+
+> 之后发版的 `baseTar` 必须指向 `../nascine-1.0.6.tar`，否则新代码会叠回 2.35 GB 的旧基础镜像上。
 
 ## 版本对应
 
@@ -124,7 +139,8 @@ docker tag xdxy/nascine:1.0.6 xdxy/nascine:latest && docker push xdxy/nascine:la
 
 | 镜像 tag | 源码 tag | 说明 |
 |---|---|---|
-| `1.0.5` / `latest` | `v1.0.5` | 当前发布版 |
+| `1.0.5` / `latest` | `v1.0.5` | 当前线上镜像 |
+| — | `v1.0.6` | 镜像瘦身版：源码已发布，镜像待推送（681 MB） |
 
 ## 许可与致谢
 
