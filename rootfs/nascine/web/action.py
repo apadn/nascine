@@ -1196,6 +1196,12 @@ class WebAction:
         # 保存配置
         if not config_test:
             Config().save_config(cfg)
+            # 轮询监控间隔改动后立即生效，不用重启容器
+            if "app.sync_poll_interval" in data:
+                try:
+                    restart_monitor()
+                except Exception as err:
+                    ExceptionUtils.exception_traceback(err)
 
         return {"code": 0}
 

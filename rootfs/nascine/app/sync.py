@@ -389,14 +389,21 @@ class Sync(object):
                 try:
                     fs_type = get_fs_type(monpath)
                     # Windows 模式或 FUSE 挂载（如 Unraid 的 /mnt/user）下 inotify 不可靠，
-                    # 改用轮询，避免其它容器写入后收不到事件导致不自动转移
-                    use_polling = self._sync_sys == OsType.WINDOWS or is_fuse_path(monpath)
+                    # 默认改用轮询；轮询会周期性 stat 目录树，源目录若在休眠的机械盘上会持续唤醒硬盘，
+                    # 所以在「系统设置」里可通过 app.sync_poll_interval 调整：0 表示关闭轮询、强制走 inotify
+                    poll_interval = self.get_poll_interval()
+                    use_polling = (self._sync_sys == OsType.WINDOWS or is_fuse_path(monpath)) \
+                        and poll_interval > 0
                     if use_polling:
-                        observer = PollingObserver(timeout=10)
-                        log.info("【Sync】%s（%s）使用轮询监控" % (monpath, fs_type or "未知文件系统"))
+                        observer = PollingObserver(timeout=poll_interval)
+                        log.info("【Sync】%s（%s）使用轮询监控，间隔 %s 秒" % (
+                            monpath, fs_type or "未知文件系统", poll_interval))
                     else:
                         observer = Observer(timeout=10)
                         log.info("【Sync】%s（%s）使用事件监控" % (monpath, fs_type or "未知文件系统"))
+                        if self._sync_sys == OsType.WINDOWS or is_fuse_path(monpath):
+                            log.info("【Sync】轮询已关闭（sync_poll_interval=0），"
+                                     "该目录为 FUSE 挂载，若收不到事件请改回轮询")
                     self._observer.append(observer)
                     observer.schedule(FileMonitorHandler(monpath, self), path=monpath, recursive=True)
                     observer.daemon = True
@@ -405,6 +412,20 @@ class Sync(object):
                 except Exception as e:
                     ExceptionUtils.exception_traceback(e)
                     log.error("%s 启动目录监控失败：%s" % (monpath, str(e)))
+
+    @staticmethod
+    def get_poll_interval():
+        """
+        监控轮询间隔（秒）。0 表示关闭轮询、改用 inotify 事件监控
+        未配置时沿用旧行为（10 秒）
+        """
+        try:
+            value = Config().get_config('app').get('sync_poll_interval')
+            if value is None or value == '':
+                return 10
+            return max(int(float(value)), 0)
+        except Exception:
+            return 10
 
     def stop_service(self):
         """

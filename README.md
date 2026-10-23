@@ -1,8 +1,8 @@
 # nascine
 
-[![Docker Pulls](https://img.shields.io/docker/pulls/xdxy/nascine)](https://hub.docker.com/r/xdxy/nascine)
-[![Image Version](https://img.shields.io/docker/v/xdxy/nascine/latest?label=image)](https://hub.docker.com/r/xdxy/nascine/tags)
-[![License: AGPL v3](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
+![Docker Pulls](https://img.shields.io/docker/pulls/xdxy/nascine)
+![Image Version](https://img.shields.io/docker/v/xdxy/nascine/latest?label=image)
+![License: AGPL v3](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)
 ![Platform](https://img.shields.io/badge/platform-linux%2Famd64-lightgrey)
 
 极简 · 苹果风的个人影音库中枢：**下载 → 整理 → 刮削**，一个容器跑完。
@@ -17,13 +17,13 @@ nascine 是 [nas-tools](https://github.com/jxxghp/nas-tools) 的精简定制版�
 
 ## 功能范围
 
-| 保留 | 已移除 |
-|---|---|
-| 媒体库（电影 / 剧集 / 动漫）与刮削 | PT 站点、做种、刷流 |
-| qBittorrent / Transmission / Aria2 / 115 等下载器 | 资源搜索、站点索引 |
-| 目录同步（监控目录自动识别改名转移） | 订阅、RSS 自动下载 |
-| 消息通知、自定义识别词、过滤规则 | 豆瓣同步、媒体整理（硬链接整理） |
-| 服务控制、系统设置、版本更新提示 | 第三方代理 / OCR / CookieCloud 内置服务 |
+| 保留                                            | 已移除                            |
+| --------------------------------------------- | ------------------------------ |
+| 媒体库（电影 / 剧集 / 动漫）与刮削                          | PT 站点、做种、刷流                    |
+| qBittorrent / Transmission / Aria2 / 115 等下载器 | 资源搜索、站点索引                      |
+| 目录同步（监控目录自动识别改名转移）                            | 订阅、RSS 自动下载                    |
+| 消息通知、自定义识别词、过滤规则                              | 豆瓣同步、媒体整理（硬链接整理）               |
+| 服务控制、系统设置、版本更新提示                              | 第三方代理 / OCR / CookieCloud 内置服务 |
 
 ## 快速开始
 
@@ -69,11 +69,11 @@ docker run -d \
 
 ### 三个目录
 
-| 容器内路径 | 用途 | 说明 |
-|---|---|---|
-| `/config` | 配置、SQLite 数据库、日志 | 必须持久化，否则重建容器后配置全丢 |
-| `/downloads` | 下载器的输出目录 | 与下载器指向同一个宿主机目录，nascine 才能监控到文件 |
-| `/media` | 媒体库根目录 | 刮削后的文件归档到这里，供 Emby / Jellyfin 扫描 |
+| 容器内路径        | 用途               | 说明                               |
+| ------------ | ---------------- | -------------------------------- |
+| `/config`    | 配置、SQLite 数据库、日志 | 必须持久化，否则重建容器后配置全丢                |
+| `/downloads` | 下载器的输出目录         | 与下载器指向同一个宿主机目录，nascine 才能监控到文件   |
+| `/media`     | 媒体库根目录           | 刮削后的文件归档到这里，供 Emby / Jellyfin 扫描 |
 
 `PUID` / `PGID` 决定容器内进程身份，请与宿主机上 `/media` 目录的属主保持一致（群晖、Unraid 通常是 `99:100`），否则会出现「移动失败，错误码 -1」。
 
@@ -137,10 +137,37 @@ python3 make_slim.py --source xdxy/nascine:1.0.5 --target xdxy/nascine:1.0.6 --v
 
 镜像 tag 与仓库 tag 一一对应，方便审计「某个镜像到底跑的是哪份代码」：
 
-| 镜像 tag | 源码 tag | 说明 |
+| 镜像 tag             | 源码 tag   | 说明                        |
+| ------------------ | -------- | ------------------------- |
+| `1.0.5` / `latest` | `v1.0.5` | 当前线上镜像                    |
+| —                  | `v1.0.6` | 镜像瘦身版：源码已发布，镜像待推送（681 MB） |
+
+## 与硬盘休眠共存
+
+NAS（尤其是 Unraid）上最关心的一件事是「容器会不会把机械盘一直唤醒」。程序里只有两个地方会产生**周期性**磁盘访问，其余全部是事件驱动或纯网络请求：
+
+| 访问点 | 频率 | 落在哪块盘 | 处理办法 |
+|---|---|---|---|
+| TMDB 缓存落盘 | 10 分钟 | `/config/tmdb.dat` | 已改为「内容有变化才写」，空闲时零读写 |
+| 目录监控轮询 | 默认 10 秒 | 被监控的目录 | 可配置，见下 |
+
+**关于轮询**：只有监控目录位于 FUSE 挂载（Unraid 的 `/mnt/user`）或 Windows 时才会轮询——这些环境下 inotify 收不到跨容器写入的事件，只能靠扫描。轮询会周期性 `stat` 整个目录树，源目录若在休眠的机械盘上就会持续唤醒它。
+
+控制方式：**系统设置 → 监控轮询间隔（秒）**
+
+| 取值 | 行为 | 适用场景 |
 |---|---|---|
-| `1.0.5` / `latest` | `v1.0.5` | 当前线上镜像 |
-| — | `v1.0.6` | 镜像瘦身版：源码已发布，镜像待推送（681 MB） |
+| `10`（默认） | 每 10 秒扫描一次 | 源目录在 SSD / 缓存盘，或不在 Unraid |
+| `0` | 关闭轮询，改用 inotify 事件监控 | 源目录在阵列盘上、要保住硬盘休眠。**完全无周期性磁盘访问** |
+| 其它数值 | 自定义扫描间隔 | 想折中：如 `300`，5 分钟扫一次 |
+
+改为 `0` 后如果发现新文件不被自动转移（某些 FUSE 环境下 inotify 确实收不到事件），说明你的场景必须依赖轮询，那就把间隔调大（如 `600`），或者把下载目录挪到缓存盘后仍用事件监控。
+
+**更彻底的做法**（不需要改代码）：
+
+- `/config` 放缓存盘（Unraid 上即 `/mnt/cache/appdata/nascine`）——所有写入都落在 SSD
+- 被监控的下载目录挂 `/mnt/cache/xxx` 而不是 `/mnt/user/xxx`——读到的文件系统不是 `fuse`，自动走 inotify，一次扫描都不会有
+- Docker 日志加 `--log-opt max-size=10m --log-opt max-file=3`，避免 stdout 无上限追加
 
 ## 许可与致谢
 

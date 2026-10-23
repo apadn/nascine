@@ -19,6 +19,10 @@ app:
   logserver: 127.0.0.1:514
   # 【日志级别】：info、debug、error
   loglevel: info
+  # 【目录监控轮询间隔（秒）】：仅当监控目录位于 FUSE 挂载（Unraid 的 /mnt/user）或 Windows 时生效
+  # 这些环境下 inotify 不可靠，程序默认每 10 秒扫描一次目录树；源目录若在休眠的机械盘上会阻止硬盘休眠
+  # 填 0 表示关闭轮询、强制使用 inotify 事件监控（不再产生周期性磁盘访问，但可能收不到跨容器写入的事件）
+  sync_poll_interval: 10
   # 【WEB管理界面监听地址】：如需支持ipv6需设置为::，如::无法访问可改为0.0.0.0
   web_host: "::"
   # 【WEB管理界面端口】：默认3000
