@@ -25,7 +25,7 @@ nascine 取自 **nas** + **cinema**，基于 NAS-Tools 2.9.1 重制：界面改�
 ### Docker（推荐）
 
 ```
-docker pull xdxy/nascine:1.0.5
+docker pull xdxy/nascine:1.0.6
 ```
 
 部署细节见 [docker/readme.md](docker/readme.md) 。

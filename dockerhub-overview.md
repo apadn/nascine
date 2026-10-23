@@ -139,7 +139,7 @@ docker compose pull && docker compose up -d
 
 - 基础：Alpine + Python 3 + pm2，非 root 运行（`su-exec` 降权），支持 `umask`
 - 架构：`linux/amd64`（arm64 设备可用 `--platform linux/amd64` 以 QEMU 模拟运行）
-- 标签：`1.0.5`、`latest`
+- 标签：`1.0.6`、`latest`
 - 体积：解压后约 2.3 GB，主要来自 chromium 与编译期依赖；不需要浏览器抓取时可用 `NASCINE_FLAVOR=lite` 跳过其初始化
 
 ## 关于隐私

@@ -41,22 +41,36 @@ nascine 是 [nas-tools](https://github.com/jxxghp/nas-tools) 的精简定制版�
 
 ```bash
 # 1. 准备基础镜像（首次从 Docker Hub 拉取，之后用上一版自己的 tar 做基础）
-docker pull xdxy/nascine:1.0.5
+docker pull xdxy/nascine:1.0.6
 
 # 2. 修改代码
 vim rootfs/nascine/app/sync.py
 
 # 3. 改版本号后打包
-vim release.json          # version: 1.0.5 -> 1.0.6，baseTar 指向上一版 tar
-python3 make_release.py   # 输出 ../nascine-1.0.6.tar
+vim release.json          # version: 1.0.6 -> 1.0.7，baseTar 指向上一版 tar
+python3 make_release.py   # 输出 ../nascine-1.0.7.tar
 
 # 4. 导入并推送
-docker load -i ../nascine-1.0.6.tar
-docker push xdxy/nascine:1.0.6
-docker tag xdxy/nascine:1.0.6 xdxy/nascine:latest && docker push xdxy/nascine:latest
+docker load -i ../nascine-1.0.7.tar
+docker push xdxy/nascine:1.0.7
+docker tag xdxy/nascine:1.0.7 xdxy/nascine:latest && docker push xdxy/nascine:latest
 ```
 
 `make_release.py` 支持 `--version`、`--namespace`、`--repository`、`--base`、`--dry-run` 覆盖 `release.json` 的配置。
+
+### 镜像瘦身（可选，建议在基础镜像发版时做一次）
+
+差分打包只决定「增量层有多小」，决定不了「拉取体积有多大」——历史层里的无用组件仍然要下载。
+`make_slim.py` 用「裁剪 + 扁平化重导入」解决这个问题：在容器里跑 `slim/prune.sh` 删掉运行期用不到的
+组件，再把根文件系统 `export`/`import` 成**单层镜像**，删掉的字节才真正从拉取体积里消失。
+
+```bash
+python3 make_slim.py --source xdxy/nascine:1.0.5 --target xdxy/nascine:1.0.6 --version 1.0.6
+# 输出 ../nascine-1.0.6.tar；--dry-run 只看动作，--keep 保留中间产物
+```
+
+裁剪清单写在 `slim/prune.sh`，每一项都注明了「为什么可以删」。当前效果：2.35 GB → 681 MB
+（压缩后 1.0 GB → 145 MB）。因为会重写历史层，瘦身镜像之后要作为下一版差分的基础镜像。
 
 ## 运行
 
