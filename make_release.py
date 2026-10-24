@@ -444,7 +444,13 @@ def main():
         json.dump({repo: {version: image_id, "latest": image_id}}, fh, separators=(",", ":"))
 
     # 旧层目录直接从外层解包目录引用，新层用自己的目录
-    layer_dirs = [l.split("/")[0] for l in manifest[0]["Layers"][:-1]]
+    # 注意去重：docker save 出的 OCI 格式里所有层都在 blobs/sha256/ 下，
+    # 按顶层目录归并后会得到 ["blobs", "blobs"]，不去重会把整个 blobs 目录打进 tar 两次
+    layer_dirs = []
+    for layer_path in manifest[0]["Layers"][:-1]:
+        name = layer_path.split("/")[0]
+        if name not in layer_dirs:
+            layer_dirs.append(name)
     layer_src = {name: os.path.join(outer_dir, name) for name in layer_dirs}
     layer_src[image_id] = layer_dir
 
