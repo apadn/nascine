@@ -97,51 +97,6 @@ docker run -d \
 └── build_layer*.py          历次分层构建脚本（历史记录，可忽略）
 ```
 
-## 构建镜像
-
-本项目不用 Dockerfile，而是**基于一个已有镜像做图层差分**：把 `rootfs/nascine` 与基础镜像对比出增删改，只打一个增量层，因此每次发版的 tar 只有几百 KB。
-
-```bash
-# 1. 准备基础镜像（首次从 Docker Hub 拉取，之后用上一版自己的 tar 做基础）
-docker pull xdxy/nascine:1.0.6
-
-# 2. 修改代码
-vim rootfs/nascine/app/sync.py
-
-# 3. 改版本号后打包
-vim release.json          # version: 1.0.6 -> 1.0.7，baseTar 指向上一版 tar
-python3 make_release.py   # 输出 ../nascine-1.0.7.tar
-
-# 4. 导入并推送
-docker load -i ../nascine-1.0.7.tar
-docker push xdxy/nascine:1.0.7
-docker tag xdxy/nascine:1.0.7 xdxy/nascine:latest && docker push xdxy/nascine:latest
-```
-
-`make_release.py` 支持 `--version`、`--namespace`、`--repository`、`--base`、`--dry-run` 覆盖 `release.json` 的配置。
-
-## 镜像瘦身
-
-1.0.6 起镜像从 2.35 GB 精简到 **681 MB**（`docker pull` 实际下载约 145 MB），做法是裁剪 + 扁平化两步：
-
-```bash
-python3 make_slim.py --source xdxy/nascine:1.0.5 --target xdxy/nascine:1.0.6 --version 1.0.6
-```
-
-- **裁剪**：`slim/prune.sh` 在容器内删掉运行期没有任何调用路径的组件——chromium / chromedriver（站点签到与索引器已随 PT 模块移除）、gcc 工具链与 C 头文件、`libpython*.a`、Cython / jedi / pygments / prompt_toolkit、rclone、ffmpeg / ffprobe、git / mc、字体、`plexapi` 的测试数据。每一项删除前都核对过调用点。
-- **扁平化**：`rm` 在增量层里只留一个 whiteout 标记，原层字节仍在、照样要下载。所以流程是 裁剪层 → `docker export` 拿扁平根文件系统 → `docker import --change` 逐条还原 ENV / ENTRYPOINT / WORKDIR / VOLUME / EXPOSE / LABEL → `docker save`。删掉的字节这才真正消失。
-
-> 之后发版的 `baseTar` 必须指向 `../nascine-1.0.6.tar`，否则新代码会叠回 2.35 GB 的旧基础镜像上。
-
-## 版本对应
-
-镜像 tag 与仓库 tag 一一对应，方便审计「某个镜像到底跑的是哪份代码」：
-
-| 镜像 tag | 源码 tag | 说明 |
-|---|---|---|
-| `1.0.5` / `latest` | `v1.0.5` | 当前线上镜像 |
-| — | `v1.0.6` | 镜像瘦身版：源码已发布，镜像待推送（681 MB） |
-
 ## 许可与致谢
 
 本项目基于 [nas-tools](https://github.com/jxxghp/nas-tools)（作者 [jxxghp](https://github.com/jxxghp)）修改而来，遵循 **AGPL-3.0** 许可，许可证全文见 [`LICENSE`](LICENSE)。
