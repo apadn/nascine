@@ -1,4 +1,5 @@
 import threading
+import time
 
 import log
 from app.conf import ModuleConf
@@ -11,6 +12,10 @@ from config import Config
 
 lock = threading.Lock()
 server_lock = threading.Lock()
+play_lock = threading.Lock()
+
+# 播放记录缓存时长（秒），避免刷新首页时反复请求媒体服务器
+PLAY_CACHE_SECONDS = 60
 
 
 @singleton
@@ -20,6 +25,8 @@ class MediaServer:
     _server = None
     mediadb = None
     progress = None
+    _play_cache = None
+    _play_cache_time = 0
 
     def __init__(self):
         self._mediaserver_schemas = SubmoduleHelper.import_submodules(
@@ -78,6 +85,30 @@ class MediaServer:
         if not self.server:
             return 0
         return self.server.get_user_count()
+
+    def get_play_history(self, num=15, refresh=False):
+        """
+        获取媒体服务器最近播放记录（带缓存，默认60秒内不重复请求）
+        :param num: 返回条数
+        :param refresh: 是否强制刷新缓存
+        """
+        if not self.server:
+            return []
+        now = time.time()
+        with play_lock:
+            if not refresh and self._play_cache is not None \
+                    and now - self._play_cache_time < PLAY_CACHE_SECONDS:
+                return self._play_cache[:num]
+        try:
+            records = self.server.get_play_history(num) or []
+        except Exception as e:
+            ExceptionUtils.exception_traceback(e)
+            log.error(f"【MediaServer】获取播放记录出错：{str(e)}")
+            records = []
+        with play_lock:
+            self._play_cache = records
+            self._play_cache_time = now
+        return records[:num]
 
     def get_medias_count(self):
         """

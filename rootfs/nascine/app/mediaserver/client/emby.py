@@ -3,7 +3,7 @@ import re
 
 import log
 from config import Config
-from app.mediaserver.client._base import _IMediaClient
+from app.mediaserver.client._base import _IMediaClient, parse_utc_time, format_play_time
 from app.utils import RequestUtils, SystemUtils, ExceptionUtils
 from app.utils.types import MediaType, MediaServerType
 
@@ -140,6 +140,114 @@ class Emby(_IMediaClient):
             ExceptionUtils.exception_traceback(e)
             log.error(f"【{self.server_type}】连接System/ActivityLog/Entries出错：" + str(e))
             return []
+        return ret_array[:num]
+
+    def get_users(self):
+        """
+        获取Emby所有用户（Id、名称）
+        """
+        if not self._host or not self._apikey:
+            return []
+        req_url = "%sUsers?api_key=%s" % (self._host, self._apikey)
+        try:
+            res = RequestUtils().get_res(req_url)
+            if res:
+                users = []
+                for user in res.json() or []:
+                    if user.get("Id"):
+                        users.append({"id": user.get("Id"), "name": user.get("Name")})
+                return users
+            else:
+                log.error(f"【{self.server_type}】Users 未获取到返回数据")
+        except Exception as e:
+            ExceptionUtils.exception_traceback(e)
+            log.error(f"【{self.server_type}】连接Users出错：" + str(e))
+        return []
+
+    @staticmethod
+    def __build_play_record(item, user_name):
+        """
+        把Emby的Item对象转换为播放记录
+        """
+        user_data = item.get("UserData") or {}
+        # 先算进度：有百分比用百分比，否则按是否已看完给出 100/0
+        percent = user_data.get("PlayedPercentage")
+        try:
+            percent = int(round(float(percent)))
+        except (TypeError, ValueError):
+            percent = 100 if user_data.get("Played") else 0
+        percent = max(0, min(100, percent))
+        # 完全没有播放痕迹的条目直接丢弃
+        played_at = None
+        played_dt = parse_utc_time(user_data.get("LastPlayedDate"))
+        if played_dt:
+            played_at = format_play_time(played_dt)
+        elif user_data.get("Played") or percent > 0:
+            played_at = "播放时间未知"
+        else:
+            return None
+        item_type = item.get("Type")
+        name = item.get("Name") or ""
+        title = name
+        subtitle = ""
+        if item_type == "Episode":
+            series_name = item.get("SeriesName") or ""
+            season = item.get("ParentIndexNumber")
+            episode = item.get("IndexNumber")
+            tag = ""
+            if season is not None and episode is not None:
+                try:
+                    tag = "S%02dE%02d" % (int(season), int(episode))
+                except (TypeError, ValueError):
+                    tag = ""
+            title = " ".join([x for x in [series_name, tag] if x]) or name
+            subtitle = name if name and name != title else ""
+        elif item_type == "Movie":
+            year = item.get("ProductionYear")
+            title = "%s (%s)" % (name, year) if year else name
+        return {
+            "id": item.get("Id"),
+            "title": title,
+            "subtitle": subtitle,
+            "type": item_type,
+            "user": user_name or "",
+            "played_at": played_at,
+            "timestamp": played_dt.timestamp() if played_dt else 0,
+            "percent": percent
+        }
+
+    def get_play_history(self, num=15):
+        """
+        获取各用户最近播放记录，按播放时间倒序
+        :param num: 返回条数
+        """
+        if not self._host or not self._apikey:
+            return []
+        users = self.get_users()
+        if not users:
+            users = [{"id": self._user, "name": ""}] if self._user else []
+        ret_array = []
+        # 已看完 + 看到一半（IsResumable）都要，否则看了一半的剧集不会出现在播放记录里
+        query_limit = max(num * 2, 20)
+        for user in users[:10]:
+            req_url = ("%semby/Users/%s/Items?Filters=IsPlayed,IsResumable&Recursive=true"
+                       "&IncludeItemTypes=Movie,Episode&SortBy=DatePlayed&SortOrder=Descending"
+                       "&Fields=ProductionYear&Limit=%s&api_key=%s") % (
+                          self._host, user.get("id"), query_limit, self._apikey)
+            try:
+                res = RequestUtils().get_res(req_url)
+                if not res:
+                    log.error(f"【{self.server_type}】Users/Items 未获取到返回数据")
+                    continue
+                for item in res.json().get("Items") or []:
+                    record = self.__build_play_record(item, user.get("name"))
+                    if record:
+                        ret_array.append(record)
+            except Exception as e:
+                ExceptionUtils.exception_traceback(e)
+                log.error(f"【{self.server_type}】连接Users/Items出错：" + str(e))
+                continue
+        ret_array.sort(key=lambda x: x.get("timestamp") or 0, reverse=True)
         return ret_array[:num]
 
     def get_medias_count(self):

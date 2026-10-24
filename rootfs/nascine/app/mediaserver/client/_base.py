@@ -1,4 +1,41 @@
+import datetime
+import re
 from abc import ABCMeta, abstractmethod
+
+
+def parse_utc_time(date_str):
+    """
+    解析媒体服务器返回的UTC时间字符串（如 2026-10-24T14:30:00.0000000Z），
+    转换为带时区的本地时间对象，解析失败返回None
+    """
+    if not date_str:
+        return None
+    # 去掉小数秒（Emby/Jellyfin 会返回7位），保留时区后缀
+    text = re.sub(r'\.\d+', '', str(date_str).strip())
+    try:
+        dt = datetime.datetime.fromisoformat(text.replace('Z', '+00:00'))
+    except ValueError:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=datetime.timezone.utc)
+    return dt.astimezone()
+
+
+def format_play_time(dt):
+    """
+    把播放时间格式化为「今天 21:30」「昨天 21:30」「10-22 21:30」这样的友好文本
+    """
+    if not dt:
+        return ""
+    now = datetime.datetime.now(dt.tzinfo)
+    days = (now.date() - dt.date()).days
+    if days == 0:
+        return "今天 %s" % dt.strftime('%H:%M')
+    if days == 1:
+        return "昨天 %s" % dt.strftime('%H:%M')
+    if dt.year == now.year:
+        return dt.strftime('%m-%d %H:%M')
+    return dt.strftime('%Y-%m-%d %H:%M')
 
 
 class _IMediaClient(metaclass=ABCMeta):
@@ -104,5 +141,14 @@ class _IMediaClient(metaclass=ABCMeta):
     def get_playing_sessions(self):
         """
         获取正在播放的会话
+        """
+        pass
+
+    @abstractmethod
+    def get_play_history(self, num=15):
+        """
+        获取最近播放记录
+        :param num: 返回条数
+        :return: 播放记录字典列表（title/type/user/played_at/percent/timestamp）
         """
         pass

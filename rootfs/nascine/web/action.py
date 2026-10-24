@@ -3433,6 +3433,13 @@ class WebAction:
         """
         return {"code": 0, "result": MediaServer().get_activity_log(30)}
 
+    @staticmethod
+    def get_play_records(data=None):
+        """
+        查询媒体服务器最近播放记录（按用户汇总，按播放时间倒序）
+        """
+        return {"code": 0, "result": MediaServer().get_play_history(15)}
+
     def get_search_result(self, data=None):
         """
         查询所有搜索结果

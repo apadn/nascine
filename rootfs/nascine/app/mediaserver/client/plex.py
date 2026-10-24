@@ -3,7 +3,7 @@ from app.utils.types import MediaServerType
 
 import log
 from config import Config
-from app.mediaserver.client._base import _IMediaClient
+from app.mediaserver.client._base import _IMediaClient, format_play_time
 from plexapi.myplex import MyPlexAccount
 from plexapi.server import PlexServer
 
@@ -208,6 +208,50 @@ class Plex(_IMediaClient):
         except Exception as err:
             ExceptionUtils.exception_traceback(err)
         yield {}
+
+    def get_play_history(self, num=15):
+        """
+        获取最近播放记录，按播放时间倒序
+        :param num: 返回条数
+        """
+        if not self._plex:
+            return []
+        ret_array = []
+        try:
+            historys = self._plex.library.history(num)
+            for his in historys:
+                viewed_at = getattr(his, "viewedAt", None) or getattr(his, "lastViewedAt", None)
+                if not viewed_at:
+                    continue
+                item_type = getattr(his, "type", "") or ""
+                title = getattr(his, "title", "") or ""
+                subtitle = ""
+                if item_type == "episode":
+                    title = getattr(his, "grandparentTitle", "") or title
+                    season = getattr(his, "parentIndex", None)
+                    episode = getattr(his, "index", None)
+                    if season is not None and episode is not None:
+                        title = "%s S%02dE%02d" % (title, int(season), int(episode))
+                    subtitle = getattr(his, "title", "") or ""
+                elif item_type == "movie":
+                    year = getattr(his, "year", None)
+                    title = "%s (%s)" % (title, year) if year else title
+                ret_array.append({
+                    "id": getattr(his, "ratingKey", None),
+                    "title": title,
+                    "subtitle": subtitle,
+                    "type": "Movie" if item_type == "movie" else "Episode",
+                    "user": "",
+                    "played_at": format_play_time(viewed_at),
+                    "timestamp": viewed_at.timestamp() if viewed_at else 0,
+                    "percent": int(round((getattr(his, "viewOffset", 0) or 0) * 100 /
+                                         (getattr(his, "duration", 0) or 1)))
+                })
+        except Exception as err:
+            ExceptionUtils.exception_traceback(err)
+            return []
+        ret_array.sort(key=lambda x: x.get("timestamp") or 0, reverse=True)
+        return ret_array[:num]
 
     def get_playing_sessions(self):
         """
