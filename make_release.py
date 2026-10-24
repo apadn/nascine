@@ -23,6 +23,7 @@
     --dry-run               只做 diff 与元数据计算，不落盘
 """
 import argparse
+import gzip
 import hashlib
 import io
 import json
@@ -39,6 +40,13 @@ IMAGE_ROOT = "nascine"   # 容器内代码目录（1.0.3 起由 /nas-tools 改�
 APP = os.path.join(HERE, "rootfs", IMAGE_ROOT)
 WORK = None  # 每次运行在系统临时目录下创建，结束时删除
 CFG_FILE = os.path.join(HERE, "release.json")
+
+# 瘦身时从镜像里剔除的目录：源码中保留（便于对照与跑单测），但不打进镜像。
+# 必须与 slim/prune.sh 的删除项保持一致，否则每次发版又会把它们加回来。
+#   third_party/plexapi/tests 里有 18MB 的 video_stub.mp4 / audio_stub.mp3，只服务 plexapi 单测
+IMAGE_EXCLUDE = (
+    "third_party/plexapi/tests/",
+)
 
 
 def log(msg):
@@ -156,6 +164,13 @@ def flatten_image(tar_path, dest):
     return manifest
 
 
+def layer_diff_id(data):
+    """层字节对应的 diff_id：docker save 出来的 OCI 层是 gzip 的，diff_ids 记的是解压后的摘要"""
+    if data[:2] == b"\x1f\x8b":
+        data = gzip.decompress(data)
+    return "sha256:" + hashlib.sha256(data).hexdigest()
+
+
 def tree_hashes(root):
     result = {}
     for dirpath, _, files in os.walk(root):
@@ -170,6 +185,11 @@ def tree_hashes(root):
             except OSError:
                 continue
     return result
+
+
+def is_excluded(path):
+    """是否属于瘦身剔除项（不进镜像）"""
+    return any(path == x.rstrip("/") or path.startswith(x) for x in IMAGE_EXCLUDE)
 
 
 def diff_tree(base_root, new_root):
@@ -357,6 +377,9 @@ def main():
         sys.exit("基础镜像里没有 %s 目录，镜像结构不符" % IMAGE_ROOT)
 
     added, changed, deleted = diff_tree(base_app, APP)
+    # 瘦身剔除项即便源码有、基础镜像没有，也不加进镜像
+    added = [f for f in added if not is_excluded(f)]
+    changed = [f for f in changed if not is_excluded(f)]
     log("新增 %d 个文件，修改 %d 个，删除 %d 个" % (len(added), len(changed), len(deleted)))
     for name in added[:30]:
         log("  + %s" % name)
@@ -441,8 +464,10 @@ def main():
         new_cfg = json.load(tf.extractfile(man[0]["Config"]))
         ok = True
         for layer_path, expect in zip(man[0]["Layers"], new_cfg["rootfs"]["diff_ids"]):
-            got = "sha256:" + hashlib.sha256(tf.extractfile(layer_path).read()).hexdigest()
-            ok = ok and got == expect
+            got = layer_diff_id(tf.extractfile(layer_path).read())
+            if got != expect:
+                ok = False
+                log("自检失败：%s 期望 %s 实际 %s" % (layer_path, expect[:19], got[:19]))
         log("自检：层数 %d，diff_ids 全部匹配 %s，RepoTags %s" % (
             len(man[0]["Layers"]), ok, man[0]["RepoTags"]))
         env = new_cfg["config"]["Env"]
