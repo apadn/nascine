@@ -3438,7 +3438,7 @@ class WebAction:
         """
         查询媒体服务器最近播放记录（按用户汇总，按播放时间倒序）
         """
-        return {"code": 0, "result": MediaServer().get_play_history(15)}
+        return {"code": 0, "result": MediaServer().get_play_history(40)}
 
     def get_search_result(self, data=None):
         """

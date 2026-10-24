@@ -3,7 +3,9 @@ import re
 
 import log
 from config import Config
-from app.mediaserver.client._base import _IMediaClient, parse_utc_time, format_play_time
+from app.mediaserver.client._base import (_IMediaClient, parse_utc_time, format_play_time,
+                                          format_play_clock, parse_play_event_type,
+                                          fill_play_duration)
 from app.utils import RequestUtils, SystemUtils, ExceptionUtils
 from app.utils.types import MediaType, MediaServerType
 
@@ -167,7 +169,7 @@ class Emby(_IMediaClient):
     @staticmethod
     def __build_play_record(item, user_name):
         """
-        把Emby的Item对象转换为播放记录
+        把Emby的Item对象转换为一条「看过」记录（活动日志兜底用）
         """
         user_data = item.get("UserData") or {}
         # 先算进度：有百分比用百分比，否则按是否已看完给出 100/0
@@ -178,18 +180,12 @@ class Emby(_IMediaClient):
             percent = 100 if user_data.get("Played") else 0
         percent = max(0, min(100, percent))
         # 完全没有播放痕迹的条目直接丢弃
-        played_at = None
         played_dt = parse_utc_time(user_data.get("LastPlayedDate"))
-        if played_dt:
-            played_at = format_play_time(played_dt)
-        elif user_data.get("Played") or percent > 0:
-            played_at = "播放时间未知"
-        else:
+        if not played_dt and not (user_data.get("Played") or percent > 0):
             return None
         item_type = item.get("Type")
         name = item.get("Name") or ""
         title = name
-        subtitle = ""
         if item_type == "Episode":
             series_name = item.get("SeriesName") or ""
             season = item.get("ParentIndexNumber")
@@ -201,25 +197,76 @@ class Emby(_IMediaClient):
                 except (TypeError, ValueError):
                     tag = ""
             title = " ".join([x for x in [series_name, tag] if x]) or name
-            subtitle = name if name and name != title else ""
+            if name and name != title:
+                title = "%s %s" % (title, name)
         elif item_type == "Movie":
             year = item.get("ProductionYear")
             title = "%s (%s)" % (name, year) if year else name
+        detail_parts = [x for x in [user_name, "已看完" if percent >= 100 else "看到 %d%%" % percent] if x]
         return {
-            "id": item.get("Id"),
-            "title": title,
-            "subtitle": subtitle,
-            "type": item_type,
-            "user": user_name or "",
-            "played_at": played_at,
+            "type": "play",
+            "event": "看过 %s" % title,
+            "detail": " · ".join(detail_parts),
+            "item_id": item.get("Id"),
+            "user_id": None,
             "timestamp": played_dt.timestamp() if played_dt else 0,
-            "percent": percent
+            "time": format_play_clock(played_dt) if played_dt else "时间未知",
         }
 
-    def get_play_history(self, num=15):
+    def __get_activity_play_events(self, num):
         """
-        获取各用户最近播放记录，按播放时间倒序
+        从Emby活动日志里取播放事件（开始/停止），和后台「活动」页面同源
+        """
+        if not self._host or not self._apikey:
+            return []
+        req_url = ("%semby/System/ActivityLog/Entries?api_key=%s&StartIndex=0"
+                   "&HasUserId=true&Limit=%s") % (self._host, self._apikey, max(num * 4, 120))
+        try:
+            res = RequestUtils().get_res(req_url)
+            if not res:
+                log.error(f"【{self.server_type}】System/ActivityLog/Entries 未获取到返回数据")
+                return []
+            items = res.json().get("Items") or []
+        except Exception as e:
+            ExceptionUtils.exception_traceback(e)
+            log.error(f"【{self.server_type}】连接System/ActivityLog/Entries出错：" + str(e))
+            return []
+        events = []
+        for item in items:
+            kind = parse_play_event_type(item.get("Type"))
+            if not kind:
+                continue
+            dt = parse_utc_time(item.get("Date"))
+            if not dt:
+                continue
+            events.append({
+                "type": kind,
+                "event": item.get("Name") or "",
+                "detail": item.get("ShortOverview") or item.get("Overview") or "",
+                "item_id": item.get("ItemId"),
+                "user_id": item.get("UserId"),
+                "timestamp": dt.timestamp(),
+                "time": format_play_clock(dt),
+            })
+        events.sort(key=lambda x: x.get("timestamp") or 0)
+        fill_play_duration(events)
+        events.reverse()
+        return events[:num]
+
+    def get_play_history(self, num=40):
+        """
+        获取播放记录（逐条事件：几点开播、几点停、播了多久）
+        优先用活动日志（与媒体服务器后台一致），日志里没有播放事件时退回「最近看过」
         :param num: 返回条数
+        """
+        events = self.__get_activity_play_events(num)
+        if events:
+            return events
+        return self.__get_recent_plays(num)
+
+    def __get_recent_plays(self, num):
+        """
+        活动日志不可用时的兜底：按用户查询最近看过的条目
         """
         if not self._host or not self._apikey:
             return []

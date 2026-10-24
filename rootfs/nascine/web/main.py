@@ -210,10 +210,7 @@ def index():
     else:
         ServerSucess = False
 
-    # 获得活动日志
-    Activity = WebAction().get_library_playhistory().get("result")
-
-    # 最近播放记录
+    # 播放记录（逐条事件：几点开播、几点停、播了多久）
     PlayRecords = WebAction().get_play_records().get("result") or []
 
     # 磁盘空间
@@ -228,7 +225,6 @@ def index():
                                        'SeriesCount': MediaCounts.get("Series"),
                                        'SongCount': MediaCounts.get("Music"),
                                        "EpisodeCount": MediaCounts.get("Episodes")},
-                           Activitys=Activity,
                            Plays=PlayRecords,
                            UserCount=MediaCounts.get("User"),
                            FreeSpace=LibrarySpaces.get("FreeSpace"),

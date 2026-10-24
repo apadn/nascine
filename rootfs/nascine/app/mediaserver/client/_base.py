@@ -38,6 +38,67 @@ def format_play_time(dt):
     return dt.strftime('%Y-%m-%d %H:%M')
 
 
+def format_play_clock(dt):
+    """
+    事件流的时刻：当天的只给「21:30:05」，昨天加前缀，更早给「10-22 21:30」
+    """
+    if not dt:
+        return ""
+    now = datetime.datetime.now(dt.tzinfo)
+    days = (now.date() - dt.date()).days
+    if days == 0:
+        return dt.strftime('%H:%M:%S')
+    if days == 1:
+        return "昨天 %s" % dt.strftime('%H:%M')
+    if dt.year == now.year:
+        return dt.strftime('%m-%d %H:%M')
+    return dt.strftime('%Y-%m-%d %H:%M')
+
+
+# 各版本媒体服务器的播放事件类型，统一归一化成 start / stop
+PLAY_START_TYPES = (
+    "videoplayback",          # Emby < 4.9 / Jellyfin
+    "audioplayback",
+    "playback.start",         # Emby >= 4.9（活动日志与通知统一后的新类型）
+    "playbackstart",
+)
+PLAY_STOP_TYPES = (
+    "videoplaybackstopped",
+    "audioplaybackstopped",
+    "playback.stop",
+    "playbackstop",
+)
+
+
+def parse_play_event_type(event_type):
+    """
+    把活动日志的 Type 归一化成 start / stop，非播放事件返回 None
+    """
+    text = (event_type or "").strip().lower()
+    if text in PLAY_START_TYPES:
+        return "start"
+    if text in PLAY_STOP_TYPES:
+        return "stop"
+    return None
+
+
+def fill_play_duration(events):
+    """
+    按时间正序的播放事件里，用 start/stop 配对补出「本次播放多久」，
+    事件自身已带时长说明（ShortOverview）时不覆盖
+    """
+    starts = {}
+    for event in events:
+        key = (event.get("user_id"), event.get("item_id"))
+        if event.get("type") == "start":
+            starts[key] = event.get("timestamp")
+        elif event.get("type") == "stop":
+            begin = starts.pop(key, None)
+            if begin and not event.get("detail") and event.get("timestamp", 0) > begin:
+                minutes = max(1, int(round((event["timestamp"] - begin) / 60.0)))
+                event["detail"] = "本次播放 %d 分钟" % minutes
+
+
 class _IMediaClient(metaclass=ABCMeta):
 
     @abstractmethod
@@ -145,7 +206,7 @@ class _IMediaClient(metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def get_play_history(self, num=15):
+    def get_play_history(self, num=40):
         """
         获取最近播放记录
         :param num: 返回条数

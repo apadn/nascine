@@ -120,73 +120,35 @@
                 <div class="card-header">
                   <h3 class="card-title">
                     {{ SVG.player_play() }}
-                    最近播放
+                    播放记录
                   </h3>
                   <div class="card-actions text-muted">
                     <span class="small">来自 {{ MediaServerType|title }}</span>
                   </div>
                 </div>
                 {% if Plays %}
-                  <div class="card-body card-body-scrollable card-body-scrollable-shadow pt-0">
+                  <div class="card-body card-body-scrollable card-body-scrollable-shadow pt-2">
                     <div class="divide-y">
                       {% for Play in Plays %}
-                        <div class="py-3">
-                          <div class="row align-items-center g-2">
-                            <div class="col-auto">
-                              <span class="avatar avatar-sm {% if Play.type == 'Movie' %}bg-blue-lt{% else %}bg-purple-lt{% endif %}">
-                                {% if Play.type == 'Movie' %}
-                                  {{ SVG.movie() }}
-                                {% else %}
-                                  {{ SVG.device_tv() }}
-                                {% endif %}
-                              </span>
-                            </div>
-                            <div class="col">
-                              <div class="text-truncate fw-bold">{{ Play.title }}</div>
-                              <div class="text-muted small text-truncate">
-                                {% if Play.subtitle %}{{ Play.subtitle }} · {% endif %}
-                                {% if Play.user %}{{ Play.user }} · {% endif %}
-                                {{ Play.played_at }}
-                              </div>
-                              {% if Play.percent < 100 %}
-                                <div class="progress progress-xs mt-1">
-                                  <div class="progress-bar bg-primary" role="progressbar"
-                                       style="width: {{ Play.percent }}%"
-                                       aria-valuenow="{{ Play.percent }}" aria-valuemin="0" aria-valuemax="100"></div>
-                                </div>
+                        <div class="py-2">
+                          <div class="row g-2 align-items-start flex-nowrap">
+                            <div class="col-auto text-muted small pt-1"
+                                 style="width: 5.2rem; font-variant-numeric: tabular-nums;">{{ Play.time }}</div>
+                            <div class="col-auto pt-1">
+                              {% if Play.type == 'start' %}
+                                <span class="text-green">{{ SVG.player_play() }}</span>
+                              {% elif Play.type == 'stop' %}
+                                <span class="d-inline-block text-secondary"
+                                      style="width: 9px; height: 9px; margin: 6px 6px 0; border-radius: 2px; background-color: currentColor;"></span>
+                              {% else %}
+                                <span class="text-blue">{{ SVG.eye() }}</span>
                               {% endif %}
                             </div>
-                            <div class="col-auto text-muted small">
-                              {% if Play.percent >= 100 %}已看完{% else %}{{ Play.percent }}%{% endif %}
-                            </div>
-                          </div>
-                        </div>
-                      {% endfor %}
-                    </div>
-                  </div>
-                {% elif Activitys %}
-                  <div class="card-body card-body-scrollable card-body-scrollable-shadow">
-                    <div class="divide-y">
-                      {% for Activity in Activitys %}
-                        <div>
-                          <div class="row">
-                            <div class="col-auto">
-                              <span class="avatar">
-                                {% if Activity.type == "LG" %}
-                                  {{ SVG.user() }}
-                                {% else %}
-                                  {{ SVG.player_play() }}
-                                {% endif %}
-                              </span>
-                            </div>
                             <div class="col">
-                              <div class="text-truncate">
-                                {{ Activity.event }}
-                              </div>
-                              <div class="text-muted">{{ Activity.date }}</div>
-                            </div>
-                            <div class="col-auto align-self-center">
-                              <div class="bg-primary"></div>
+                              <div class="text-truncate">{{ Play.event }}</div>
+                              {% if Play.detail %}
+                                <div class="text-muted small text-truncate">{{ Play.detail }}</div>
+                              {% endif %}
                             </div>
                           </div>
                         </div>
@@ -199,7 +161,7 @@
                     <div class="mb-1">暂无播放记录</div>
                     <div class="small text-center">
                       {% if MediaServerType %}
-                        在 {{ MediaServerType|title }} 中播放过影片后，这里会显示最近观看的内容
+                        在 {{ MediaServerType|title }} 中播放过影片后，这里会显示每次播放的起止时间与进度
                       {% else %}
                         请先在「媒体服务器」中完成配置
                       {% endif %}

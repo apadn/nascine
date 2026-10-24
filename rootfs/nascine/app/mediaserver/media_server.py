@@ -86,7 +86,7 @@ class MediaServer:
             return 0
         return self.server.get_user_count()
 
-    def get_play_history(self, num=15, refresh=False):
+    def get_play_history(self, num=40, refresh=False):
         """
         获取媒体服务器最近播放记录（带缓存，默认60秒内不重复请求）
         :param num: 返回条数
