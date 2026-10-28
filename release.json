@@ -1,12 +1,12 @@
 {
   "namespace": "xdxy",
   "repository": "nascine",
-  "version": "1.0.8",
-  "baseTar": "../nascine-1.0.8.tar",
+  "version": "1.0.9",
+  "baseTar": "../nascine-1.0.9.tar",
   "update": {
     "mode": "docker",
     "api": "",
     "url": ""
   },
-  "description": "nascine 1.0.8 — 极简苹果风个人影音库中枢（下载→整理→刮削）。仅保留媒体库、下载管理、服务与系统设置；不含 PT/探索/资源搜索/订阅/豆瓣/媒体整理，不内置任何第三方代理、OCR、CookieCloud 服务，转移方式仅复制与移动"
+  "description": "nascine 1.0.9 — 极简苹果风个人影音库中枢（下载→整理→刮削）。仅保留媒体库、下载管理、服务与系统设置；不含 PT/探索/资源搜索/订阅/豆瓣/媒体整理，不内置任何第三方代理、OCR、CookieCloud 服务，转移方式仅复制与移动。本版为安全加固版：服务端权限校验、消除命令注入与路径穿越"
 }
