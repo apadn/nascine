@@ -79,19 +79,37 @@ class SystemUtils:
     @staticmethod
     def check_process(pname):
         """
-        检查进程序是否存在
+        检查进程是否存在
+        注意：不再拼 shell 管道，避免 pname 里带 shell 元字符时被当成命令执行
         """
         if not pname:
             return False
-        text = subprocess.Popen('ps -ef | grep -v grep | grep %s' % pname, shell=True).communicate()
-        return True if text else False
+        try:
+            result = subprocess.run(["ps", "-ef"],
+                                    stdout=subprocess.PIPE,
+                                    stderr=subprocess.DEVNULL)
+            text = result.stdout.decode("utf-8", "ignore")
+        except Exception as err:
+            ExceptionUtils.exception_traceback(err)
+            return False
+        for line in text.splitlines()[1:]:
+            if pname in line and "grep" not in line:
+                return True
+        return False
 
     @staticmethod
     def execute(cmd):
         """
         执行命令，获得返回结果
+        :param cmd: 字符串（走 shell，仅限内部常量命令）或参数列表（不走 shell，推荐）
         """
         try:
+            if isinstance(cmd, (list, tuple)):
+                result = subprocess.run(cmd,
+                                        stdout=subprocess.PIPE,
+                                        stderr=subprocess.DEVNULL)
+                text = result.stdout.decode("utf-8", "ignore").strip()
+                return text.splitlines()[0] if text else ""
             with os.popen(cmd) as p:
                 return p.readline().strip()
         except Exception as err:

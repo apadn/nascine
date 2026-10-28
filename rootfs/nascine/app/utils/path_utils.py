@@ -116,6 +116,49 @@ class PathUtils:
         return False
 
     @staticmethod
+    def safe_join_path(base, name):
+        """
+        在 base 目录下拼接一个文件名，拒绝带路径分隔符或 . / .. 的名字
+        用于"重命名"这类只应该改名字、不应该改位置的场景，返回 None 表示不合法
+        """
+        if not base or not name:
+            return None
+        name = str(name).strip()
+        if not name or name in (".", ".."):
+            return None
+        if os.path.basename(name) != name \
+                or "/" in name or "\\" in name \
+                or os.path.isabs(name) or os.path.splitdrive(name)[0]:
+            return None
+        return os.path.join(os.path.normpath(base), name)
+
+    @staticmethod
+    def is_path_in_paths(path, paths):
+        """
+        判断 path 是否落在 paths 中的某个目录之内（含该目录本身）
+        两侧都做 realpath，符号链接指向目标外时同样会被判为越界；
+        按路径分隔符比较，避免 "/media/a" 命中 "/media/abc"
+        """
+        if not path:
+            return False
+        if isinstance(paths, str):
+            paths = [paths]
+        if not paths:
+            return False
+        real_path = os.path.realpath(os.path.normpath(str(path)))
+        for one in paths:
+            if not one:
+                continue
+            real_root = os.path.realpath(os.path.normpath(str(one)))
+            # 保留根目录的尾部分隔符（"/"、"C:\\"），其余去掉再比较
+            base = real_root.rstrip(os.sep) or real_root
+            if real_path == real_root:
+                return True
+            if real_path.startswith(base + os.sep):
+                return True
+        return False
+
+    @staticmethod
     def get_bluray_dir(path):
         """
         判断是否蓝光原盘目录，是则返回原盘的根目录，否则返回空

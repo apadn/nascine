@@ -43,6 +43,7 @@ from app.utils.types import RmtMode, OsType, SearchType, DownloaderType, SyncTyp
 from config import RMT_MEDIAEXT, TMDB_IMAGE_W500_URL, RMT_SUBEXT, Config
 from web.backend.search_torrents import search_medias_for_web, search_media_by_message
 from web.backend.web_utils import WebUtils
+from web.security import check_action_permission
 
 
 class WebAction:
@@ -213,8 +214,11 @@ class WebAction:
         func = self._actions.get(cmd)
         if not func:
             return {"code": -1, "msg": "非授权访问！"}
-        else:
-            return func(data)
+        # 动作级权限：受限用户只能用只读查询和下载订阅类动作
+        denied = check_action_permission(cmd)
+        if denied:
+            return denied
+        return func(data)
 
     def api_action(self, cmd, data=None):
         result = self.action(cmd, data)
@@ -938,9 +942,54 @@ class WebAction:
         return {"retcode": 0}
 
     @staticmethod
-    def delete_media_file(filedir, filename):
+    def get_file_write_roots():
+        """
+        Web 接口允许改动的根目录：媒体库目录 + 目录同步的源/目的/未识别目录
+        重命名、删除这类文件操作都要先落在这些目录里，避免传入 ../ 或系统路径
+        """
+        roots = []
+        media = Config().get_config('media') or {}
+        for key in ('movie_path', 'tv_path', 'anime_path', 'unknown_path'):
+            value = media.get(key)
+            if not value:
+                continue
+            if isinstance(value, str):
+                value = [value]
+            try:
+                roots.extend([str(one) for one in value if one])
+            except TypeError:
+                continue
+        try:
+            for sync_item in DbHelper().get_config_sync_paths() or []:
+                for attr in ('SOURCE', 'DEST', 'UNKNOWN'):
+                    value = getattr(sync_item, attr, None)
+                    if value:
+                        roots.append(str(value))
+        except Exception as err:
+            ExceptionUtils.exception_traceback(err)
+        return roots
+
+    @staticmethod
+    def is_write_root(path, roots=None):
+        """
+        判断是不是配置里的根目录本身（根目录只能删其中的文件，不能整个删掉）
+        """
+        if not path:
+            return False
+        roots = WebAction.get_file_write_roots() if roots is None else roots
+        real_path = os.path.realpath(os.path.normpath(path))
+        for one in roots or []:
+            if not one:
+                continue
+            if real_path == os.path.realpath(os.path.normpath(str(one))):
+                return True
+        return False
+
+    @staticmethod
+    def delete_media_file(filedir, filename, roots=None):
         """
         删除媒体文件，空目录也支被删除
+        :param roots: 允许清理空目录的范围，不传则按媒体库目录计算
         """
         filedir = os.path.normpath(filedir).replace("\\", "/")
         file = os.path.join(filedir, filename)
@@ -952,20 +1001,26 @@ class WebAction:
             nfofile = os.path.join(filedir, nfoname)
             if os.path.exists(nfofile):
                 os.remove(nfofile)
+            # 空目录清理只发生在媒体库目录内部，且不会删掉配置的根目录本身
+            roots = WebAction.get_file_write_roots() if roots is None else roots
+            if not PathUtils.is_path_in_paths(filedir, roots):
+                return True, f"{file} 删除成功"
             # 检查空目录并删除
             if re.findall(r"^S\d{2}|^Season", os.path.basename(filedir), re.I):
                 # 当前是季文件夹，判断并删除
                 seaon_dir = filedir
-                if seaon_dir.count('/') > 1 and not PathUtils.get_dir_files(seaon_dir, exts=RMT_MEDIAEXT):
+                if not WebAction.is_write_root(seaon_dir, roots) \
+                        and not PathUtils.get_dir_files(seaon_dir, exts=RMT_MEDIAEXT):
                     shutil.rmtree(seaon_dir)
                 # 媒体文件夹
                 media_dir = os.path.dirname(seaon_dir)
             else:
                 media_dir = filedir
-            # 检查并删除媒体文件夹，非根目录且目录大于二级，且没有媒体文件时才会删除
+            # 检查并删除媒体文件夹，非根目录且没有媒体文件时才会删除
             if media_dir != '/' \
-                    and media_dir.count('/') > 1 \
                     and not re.search(r'[a-zA-Z]:/$', media_dir) \
+                    and not WebAction.is_write_root(media_dir, roots) \
+                    and PathUtils.is_path_in_paths(media_dir, roots) \
                     and not PathUtils.get_dir_files(media_dir, exts=RMT_MEDIAEXT):
                 shutil.rmtree(media_dir)
             return True, f"{file} 删除成功"
@@ -3992,13 +4047,19 @@ class WebAction:
     @staticmethod
     def __rename_file(data):
         """
-        文件重命名
+        文件重命名：只允许在同一个目录内改名，不允许借文件名跳出媒体库目录
         """
         path = data.get("path")
         name = data.get("name")
         if path and name:
+            roots = WebAction.get_file_write_roots()
+            if not PathUtils.is_path_in_paths(path, roots):
+                return {"code": 1, "msg": f"{path} 不在媒体库目录内，拒绝操作"}
+            target = PathUtils.safe_join_path(os.path.dirname(path), name)
+            if not target:
+                return {"code": 1, "msg": "文件名不合法"}
             try:
-                shutil.move(path, os.path.join(os.path.dirname(path), name))
+                shutil.move(path, target)
             except Exception as e:
                 ExceptionUtils.exception_traceback(e)
                 return {"code": -1, "msg": str(e)}
@@ -4010,10 +4071,15 @@ class WebAction:
         """
         files = data.get("files")
         if files:
+            roots = WebAction.get_file_write_roots()
             # 删除文件
             for file in files:
+                if not PathUtils.is_path_in_paths(file, roots):
+                    log.error(f"【MediaFile】{file} 不在媒体库目录内，跳过删除")
+                    continue
                 del_flag, del_msg = self.delete_media_file(filedir=os.path.dirname(file),
-                                                           filename=os.path.basename(file))
+                                                           filename=os.path.basename(file),
+                                                           roots=roots)
                 if not del_flag:
                     log.error(f"【MediaFile】{del_msg}")
                 else:

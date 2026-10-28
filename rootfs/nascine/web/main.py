@@ -43,7 +43,7 @@ from web.backend.WXBizMsgCrypt3 import WXBizMsgCrypt
 from web.backend.user import User
 from web.backend.wallpaper import get_login_wallpaper
 from web.backend.web_utils import WebUtils
-from web.security import require_auth
+from web.security import require_auth, admin_required
 
 # 配置文件锁
 ConfigLock = Lock()
@@ -269,6 +269,7 @@ def downloaded():
 # 服务页面
 @App.route('/service', methods=['POST', 'GET'])
 @login_required
+@admin_required
 def service():
     scheduler_cfg_list = []
     RuleGroups = Filter().get_rule_groups()
@@ -392,6 +393,7 @@ def service():
 # 基础设置页面
 @App.route('/basic', methods=['POST', 'GET'])
 @login_required
+@admin_required
 def basic():
     proxy = Config().get_config('app').get("proxies", {}).get("http")
     if proxy:
@@ -408,6 +410,7 @@ def basic():
 # 自定义识别词设置页面
 @App.route('/customwords', methods=['POST', 'GET'])
 @login_required
+@admin_required
 def customwords():
     groups = WebAction().get_customwords().get("result")
     return render_template("setting/customwords.html",
@@ -418,6 +421,7 @@ def customwords():
 # 目录同步页面
 @App.route('/directorysync', methods=['POST', 'GET'])
 @login_required
+@admin_required
 def directorysync():
     RmtModeDict = WebAction().get_rmt_modes()
     SyncPaths = WebAction().get_directorysync().get("result")
@@ -430,6 +434,7 @@ def directorysync():
 # 下载器页面
 @App.route('/downloader', methods=['POST', 'GET'])
 @login_required
+@admin_required
 def downloader():
     return render_template("setting/downloader.html",
                            Config=Config().get_config(),
@@ -440,6 +445,7 @@ def downloader():
 # 下载设置页面
 @App.route('/download_setting', methods=['POST', 'GET'])
 @login_required
+@admin_required
 def download_setting():
     DownloadSetting = Downloader().get_download_setting()
     DefaultDownloadSetting = Downloader().get_default_download_setting()
@@ -454,6 +460,7 @@ def download_setting():
 # 媒体库页面
 @App.route('/library', methods=['POST', 'GET'])
 @login_required
+@admin_required
 def library():
     return render_template("setting/library.html", Config=Config().get_config())
 
@@ -461,6 +468,7 @@ def library():
 # 媒体服务器页面
 @App.route('/mediaserver', methods=['POST', 'GET'])
 @login_required
+@admin_required
 def mediaserver():
     return render_template("setting/mediaserver.html",
                            Config=Config().get_config(),
@@ -470,6 +478,7 @@ def mediaserver():
 # 通知消息页面
 @App.route('/notification', methods=['POST', 'GET'])
 @login_required
+@admin_required
 def notification():
     MessageClients = Message().get_message_client_info()
     Channels = ModuleConf.MESSAGE_CONF.get("client")
@@ -484,6 +493,7 @@ def notification():
 # 字幕设置页面
 @App.route('/subtitle', methods=['POST', 'GET'])
 @login_required
+@admin_required
 def subtitle():
     ChromeOk = ChromeHelper().get_status()
     return render_template("setting/subtitle.html",
@@ -494,6 +504,7 @@ def subtitle():
 # 用户管理页面
 @App.route('/users', methods=['POST', 'GET'])
 @login_required
+@admin_required
 def users():
     Users = WebAction().get_users().get("result")
     return render_template("setting/users.html", Users=Users, UserCount=len(Users))
@@ -502,6 +513,7 @@ def users():
 # 过滤规则设置页面
 @App.route('/filterrule', methods=['POST', 'GET'])
 @login_required
+@admin_required
 def filterrule():
     result = WebAction().get_filterrules()
     return render_template("setting/filterrule.html",
@@ -527,6 +539,7 @@ def do():
 # 目录事件响应
 @App.route('/dirlist', methods=['POST'])
 @login_required
+@admin_required
 def dirlist():
     r = ['<ul class="jqueryFileTree" style="display: none;">']
     try:
@@ -1024,6 +1037,7 @@ def subscribe():
 # 备份配置文件
 @App.route('/backup', methods=['POST'])
 @login_required
+@admin_required
 def backup():
     """
     备份用户设置文件
@@ -1072,13 +1086,18 @@ def backup():
 # 上传文件到服务器
 @App.route('/upload', methods=['POST'])
 @login_required
+@admin_required
 def upload():
     try:
         files = request.files['file']
+        # 只取文件名本身，避免 ../ 把文件写到配置目录以外
+        filename = os.path.basename(str(files.filename or "")).strip()
+        if not filename or filename in (".", ".."):
+            return {"code": 1, "msg": "文件名不合法", "filepath": ""}
         temp_path = Config().get_temp_path()
         if not os.path.exists(temp_path):
             os.makedirs(temp_path)
-        file_path = Path(temp_path) / files.filename
+        file_path = Path(temp_path) / filename
         files.save(str(file_path))
         return {"code": 0, "filepath": str(file_path)}
     except Exception as e:

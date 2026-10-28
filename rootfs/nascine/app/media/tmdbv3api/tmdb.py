@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+import json
 import logging
 import os
 import time
@@ -67,20 +68,16 @@ class TMDb(object):
 
     @property
     def proxies(self):
-        return os.environ.get(self.TMDB_PROXIES)
+        # 统一以 JSON 字符串存放，读取时 json.loads，不再用 eval
+        return os.environ.get(self.TMDB_PROXIES) or "null"
 
     @proxies.setter
     def proxies(self, proxies):
         if proxies:
-            proxies_strs = []
-            for key, value in proxies.items():
-                if not value:
-                    continue
-                proxies_strs.append("'%s': '%s'" % (key, value))
-            if proxies_strs:
-                os.environ[self.TMDB_PROXIES] = "{%s}" % ",".join(proxies_strs)
-            else:
-                os.environ[self.TMDB_PROXIES] = 'None'
+            valid = {key: value for key, value in proxies.items() if value}
+            # 代理地址由用户填写，必须序列化而不是拼成 Python 字面量，
+            # 否则地址里带引号就能通过 eval 执行任意代码
+            os.environ[self.TMDB_PROXIES] = json.dumps(valid) if valid else "null"
 
     @api_key.setter
     def api_key(self, api_key):
@@ -139,7 +136,9 @@ class TMDb(object):
     @staticmethod
     @lru_cache(maxsize=REQUEST_CACHE_MAXSIZE)
     def cached_request(method, url, data, proxies):
-        return requests.request(method, url, data=data, proxies=eval(proxies), verify=False, timeout=10)
+        return requests.request(method, url, data=data,
+                                proxies=json.loads(proxies or "null"),
+                                verify=False, timeout=10)
 
     def cache_clear(self):
         return self.cached_request.cache_clear()
@@ -161,7 +160,9 @@ class TMDb(object):
         if self.cache and self.obj_cached and call_cached and method != "POST":
             req = self.cached_request(method, url, data, self.proxies)
         else:
-            req = self._session.request(method, url, data=data, proxies=eval(self.proxies), timeout=10, verify=False)
+            req = self._session.request(method, url, data=data,
+                                        proxies=json.loads(self.proxies or "null"),
+                                        timeout=10, verify=False)
 
         headers = req.headers
 
